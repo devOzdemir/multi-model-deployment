@@ -1,54 +1,40 @@
 import json
+import os
 from datetime import datetime
-from fastapi.routing import APIRouter
-from fastapi import Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
-from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
-from langchain.chat_models import init_chat_model
-from models import ProductReview, AnalyzedReview, ProductReviewRate
+from langchain_google_genai import ChatGoogleGenerativeAI
 from database import get_db
+from models import ProductReview, AnalyzedReview, ProductReviewRate
 
 router = APIRouter()
 
-# Initialize LangChain Gemini model (Uses API Key from .env)
-model = init_chat_model(
-    model="gemini-2.0-flash-lite", model_provider="google_genai", max_tokens=500
-)
-
-agent = create_agent(
-    model=model,
-    tools=[],
-    response_format=ToolStrategy(schema=ProductReview),
-    system_prompt="Analyze product reviews and extract structured data (sentiment, rating, key points).",
-)
+# Fixed model name to 'gemini-1.5-flash' which is the standard identifier
+llm = ChatGoogleGenerativeAI(
+    model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"), temperature=0
+).with_structured_output(ProductReview)
 
 
 @router.post("/llm/chat")
-def chat(request: AnalyzedReview, db: Session = Depends(get_db)):
-    """Analyzes product review using LLM and saves to DB."""
-    result = agent.invoke(
-        {
-            "messages": [
-                {"role": "user", "content": f"Analyze this review: '{request.review}'"}
-            ]
-        }
-    )
+async def chat(request: AnalyzedReview, db: Session = Depends(get_db)):
+    try:
+        analysis = llm.invoke(request.review)
 
-    structured_data = result["structured_response"]
+        new_review = ProductReviewRate(
+            user_info=request.user,
+            review=request.review,
+            product=request.product,
+            rate=analysis.rating,
+            sentiment=analysis.sentiment,
+            key_points=json.dumps(analysis.key_points),
+            created_at=datetime.utcnow(),
+        )
 
-    review_record = ProductReviewRate(
-        user_info=request.user,
-        review=request.review,
-        product=request.product,
-        rate=structured_data.rating,
-        sentiment=structured_data.sentiment,
-        key_points=json.dumps(structured_data.key_points),
-        created_at=datetime.utcnow(),
-    )
+        db.add(new_review)
+        db.commit()  # Save to DB
+        db.refresh(new_review)
 
-    db.add(review_record)
-    db.commit()
-    db.refresh(review_record)
-
-    return structured_data
+        return {"status": "success", "analysis": analysis}
+    except Exception as e:
+        print(f"LLM ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")

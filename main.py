@@ -1,37 +1,31 @@
+# main.py
 import joblib
 from fastapi import FastAPI
 from routers import product_review_llm, iris, advertising, tensorflow_fastapi
 from database import create_db_and_tables
+
+# CRITICAL: Import all table models here so SQLModel metadata detects them
+from models import Advertising, Iris, ProductReviewRate, CommentPredict
 from dotenv import load_dotenv
 
-# Load env variables at the very beginning
 load_dotenv()
 
-# Initialize FastAPI app
-app = FastAPI(title="ML and LLM Application with Local Models")
+app = FastAPI(title="MLOps Multi-Model Deployment API")
 
 
-# Create tables on startup
+# Use the startup event to ensure DB tables are created
 @app.on_event("startup")
 def on_startup():
     create_db_and_tables()
 
 
-# Include Routers
-app.include_router(
-    product_review_llm.router, prefix="/product-review", tags=["Product Review LLM"]
-)
-app.include_router(iris.router, prefix="/iris", tags=["Iris Prediction"])
-app.include_router(
-    advertising.router, prefix="/advertising", tags=["Advertising Prediction"]
-)
-app.include_router(
-    tensorflow_fastapi.router,
-    prefix="/tensorflow",
-    tags=["TensorFlow Sentiment Analysis"],
-)
+# Router inclusions
+app.include_router(product_review_llm.router, prefix="/product-review", tags=["LLM"])
+app.include_router(iris.router, prefix="/iris", tags=["Iris"])
+app.include_router(advertising.router, prefix="/advertising", tags=["Advertising"])
+app.include_router(tensorflow_fastapi.router, prefix="/tensorflow", tags=["TensorFlow"])
 
 
 @app.get("/")
-def root():
-    return {"message": "Welcome to the Local ML and LLM Application (MLflow removed)"}
+def health_check():
+    return {"status": "online"}

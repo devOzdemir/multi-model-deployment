@@ -90,10 +90,11 @@ model.fit(
     batch_size=10,
 )
 
+# Tokenizer her zaman pickle olarak kalabilir
 with open(os.path.join(MODEL_DIR, "tokenizer.pkl"), "wb") as f:
     pickle.dump(tokenizer, f)
 
-model_path = os.path.join(MODEL_DIR, "tensorflow_model.pkl")
-joblib.dump(model, model_path)
-
-print(f"TensorFlow model saved as pickle to {model_path}")
+# Keras 3 deserialization hatasını önlemek için .keras formatı kullanılır
+model_path_h5 = os.path.join(MODEL_DIR, "tensorflow_model.h5")
+model.save(model_path_h5)  # joblib kullanma, native Keras h5 kullan
+print(f"Model saved as H5 to {model_path_h5}")
