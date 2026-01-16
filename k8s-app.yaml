@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fastapi-app
+  template:
+    metadata:
+      labels:
+        app: fastapi-app
+    spec:
+      containers:
+        - name: fastapi-container
+          image: mlops-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            # --- Gizli Değişkenleri Çekiyoruz ---
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: GOOGLE_API_KEY
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: mlops-secrets
+                  key: POSTGRES_DB
+            
+            # --- Bağlantı Adresini Oluşturuyoruz ---
+            # Burada $(DEGISKEN) kullanarak yukarıda çektiğimiz şifreleri
+            # URL'in içine güvenli bir şekilde gömüyoruz.
+            # DİKKAT: Host adresi 'postgres-service' olarak kalmalı!
+            - name: SQLALCHEMY_DATABASE_URL
+              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-service
+spec:
+  selector:
+    app: fastapi-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: LoadBalancer
